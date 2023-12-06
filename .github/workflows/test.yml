@@ -1,0 +1,48 @@
+name: Test/Test
+on:
+  push:
+    branches:
+    - "*"
+jobs:
+  Setup-Setup:
+    runs-on: ubuntu-latest
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4.1.0
+    - name: Setup Enviroment
+      uses: hashicorp/setup-terraform@v3.0.0
+      with:
+        terraform_version: 0.12.29
+  Plan_Sandpit-Plan_Sandpit:
+    needs:
+    - Setup-Setup
+    runs-on: ubuntu-latest
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4.1.0
+#     # This item has no matching transformer
+#     - task: TerraformTaskV1@0
+#       displayName: Init
+#       inputs:
+#         provider: azurerm
+#         command: init
+#         workingDirectory: "${{ github.workspace }}/DELWP-Terraform-Sandbox/src/"
+#         backendServiceArm: TerraformTest
+#         backendAzureRmResourceGroupName: terraform
+#         backendAzureRmStorageAccountName: terrastatestoragejmp
+#         backendAzureRmContainerName: tfstate
+#         backendAzureRmKey: devops_sbx.terraform.tfstate
+#     # This item has no matching transformer
+#     - task: TerraformTaskV1@0
+#       displayName: Run > terraform plan
+#       inputs:
+#         command: plan
+#         workingDirectory: "${{ github.workspace }}/DELWP-Terraform-Sandbox/src/"
+#         environmentServiceNameAzureRM: TerraformTest
+#     # This item has no matching transformer
+#     - task: TerraformTaskV1@0
+#       displayName: Run > terraform plan
+#       inputs:
+#         command: apply
+#         workingDirectory: "${{ github.workspace }}/DELWP-Terraform-Sandbox/src/"
+#         environmentServiceNameAzureRM: TerraformTest
