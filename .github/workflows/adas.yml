@@ -1,0 +1,24 @@
+name: ADAS/ADAS
+on:
+  push:
+    branches:
+    - "*"
+env:
+  advancedsecurity_codeql_language: csharp
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4.1.0
+#     # This item has no matching transformer
+#     - task: AdvancedSecurity-codeql-Init@1
+    # NuGet does not accept glob patterns. Consider specifying files directly or using a solution.
+    - run: nuget restore **/*.csproj
+    - run: dotnet build
+#     # This item has no matching transformer
+#     - task: AdvancedSecurity-Dependency-Scanning@1
+#     # This item has no matching transformer
+#     - task: AdvancedSecurity-Codeql-Analyze@1
+#     # This item has no matching transformer
+#     - task: AdvancedSecurity-Publish@1
