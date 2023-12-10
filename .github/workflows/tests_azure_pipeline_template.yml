@@ -1,0 +1,129 @@
+# Environment variables defined in a calling workflow are not accessible to this reusable workflow. Refer to the documentation for further details on this limitation.
+name: tests_azure_pipeline_template
+on:
+  workflow_call:
+    inputs:
+      sample:
+        required: false
+        type: string
+      agentPool:
+        required: false
+        default: '{"vmImage":"ubuntu-22.04"}'
+        type: string
+jobs:
+  Build-build:
+    name: Build ${{ parameters.sample.name }}
+    runs-on: windows-latest
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4.1.0
+    - run: echo "##vso[build.updatebuildnumber]${{ github.run_id }}"
+    - name: Build ${{ fromJSON(inputs.sample).buildId }}
+      id: build
+      run: |-
+        # get PAT token
+        $token = "${{ env.trigger }}"
+        $token = [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes(":$($token)"))
+        # get master branch ref
+        $url = "https://dev.azure.com/AEMO-Application-Delivery/sample/_apis/git/repositories/${{ fromJSON(inputs.sample).repository }}/refs?filter=heads/master&api-version=5.1"
+        $response = Invoke-RestMethod -Uri $url -Headers @{Authorization = "Basic $token"} -Method Get -ContentType application/json
+        echo $url
+        echo $($response.value[0].objectId)
+        # create new branch
+        $url = "https://dev.azure.com/AEMO-Application-Delivery/sample/_apis/git/repositories/${{ fromJSON(inputs.sample).repository }}/refs?api-version=5.1"
+        echo $url
+        echo "creating branch"
+        $JSON = "
+        [{
+          `"name`": `"refs/heads/pr/${{ github.run_id }}`",
+          `"newObjectId`": `"$($response.value[0].objectId)`",
+          `"oldObjectId`": `"0000000000000000000000000000000000000000`"
+        }]"
+        $response = Invoke-RestMethod -Uri $url -Headers @{Authorization = "Basic $token"} -Method Post -Body $JSON -ContentType application/json
+        echo $response
+        start-sleep -s 10 # probably dont need this just being safe
+        echo "branch created!!"
+        # run the pipeline on newly created branch
+        $url="https://dev.azure.com/AEMO-Application-Delivery/sample/_apis/pipelines/${{ fromJSON(inputs.sample).buildId }}/runs?api-version=5.1-preview"
+        $JSON = "
+        {
+          `"resources`": {
+            `"repositories`": {
+              `"self`": {
+                `"refName`": `"refs/heads/pr/${{ github.run_id }}`"
+              }
+            }
+          },
+          `"templateParameters`": {
+            `"refname`":`"${{ github.ref }}`"
+          },
+        }"
+        echo $JSON
+        echo "starting build"
+        echo $url
+        $response = Invoke-RestMethod -Uri $url -Headers @{Authorization = "Basic $token"} -Method Post -Body $JSON -ContentType application/json
+        $build_success = $false
+        do {
+          # get build status
+          $url = "$($response.url)?api-version=7.1-preview.1"
+          echo "checking build status"
+          echo $url
+          $response = Invoke-RestMethod -Uri $url -Headers @{Authorization = "Basic $token"} -Method Get -ContentType application/json
+          $state = $response.state
+          $result =  $response.result
+          echo $state
+          echo $result
+          if ($state -eq "completed" -and $result -eq "succeeded") {
+            # The build was successful.
+            echo "built successfully"
+            $build_success = $true
+            Write-Host "##vso[task.setvariable variable=build_no;issecret=false;isOutput=true;]$($response.name)"
+            exit 0
+          } ElseIf ($state -eq "completed" -and $result -eq "canceled") {
+            # The build was canceled.
+            echo "##vso[task.logissue type=error]build canceled."
+            exit 1
+          } ElseIf ($result -eq "failed") {
+            # The build failed.
+            echo "##vso[task.logissue type=error]build failed."
+            exit 1
+          } else {
+            # The build is still running.
+            echo "sleeping for 10 seconds"
+            start-sleep -s 10
+          }
+        } until ($build_success)
+      shell: powershell
+  Cleanup-cleanup:
+    name: Cleanup
+    needs:
+    - Build-build
+    runs-on: windows-latest
+    if: always() && always()
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4.1.0
+    - name: Cleanup
+      run: |-
+        $token = "${{ env.trigger }}"
+        $token = [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes(":$($token)"))
+        # delete branch
+        # get branch ref
+        $url = "https://dev.azure.com/AEMO-Application-Delivery/sample/_apis/git/repositories/${{ fromJSON(inputs.sample).repository }}/refs?filter=heads/pr/${{ github.run_id }}&api-version=5.1"
+        $response = Invoke-RestMethod -Uri $url -Headers @{Authorization = "Basic $token"} -Method Get -ContentType application/json
+        echo $($response.value[0].objectId)
+        $url = "https://dev.azure.com/AEMO-Application-Delivery/sample/_apis/git/repositories/${{ fromJSON(inputs.sample).repository }}/refs?api-version=5.1"
+        $JSON = "
+        [{
+          `"name`": `"refs/heads/pr/${{ github.run_id }}`",
+          `"newObjectId`": `"0000000000000000000000000000000000000000`",
+          `"oldObjectId`": `"$($response.value[0].objectId)`"
+        }]"
+        echo $JSON
+        echo "deleting branch"
+        echo $url
+        $response = Invoke-RestMethod -Uri $url -Headers @{Authorization = "Basic $token"} -Method Post -Body $JSON -ContentType application/json
+        echo $response
+        start-sleep -s 10
+        echo "##vso[task.complete result=Succeeded;]branch deleted!"
+      shell: powershell

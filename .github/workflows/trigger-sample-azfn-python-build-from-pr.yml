@@ -1,0 +1,9 @@
+name: ci-cd-infrastructure/trigger-sample-azfn-python-build-from-pr
+on:
+  workflow_dispatch:
+jobs:
+  tests_azure_pipeline_template:
+    name: tests_azure_pipeline_template
+    uses: "./.github/workflows/tests_azure_pipeline_template.yml"
+    with:
+      sample: '{"name":"sample_azfn_python_build","buildId":2006,"repository":"sample-python-function-app","deployments":[{"name":"sample_azfn_python_deploy","deployId":1935}]}'
