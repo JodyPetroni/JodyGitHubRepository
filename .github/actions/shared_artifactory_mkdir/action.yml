@@ -1,0 +1,23 @@
+name: shared_artifactory_mkdir
+inputs:
+  path:
+    required: false
+    type: string
+  description:
+    required: false
+    type: string
+runs:
+  using: composite
+  steps:
+  - name: "${{ inputs.description }}"
+    run: |-
+      if (!(Test-Path ${{ inputs.path }}))
+      {
+        if($PSVersionTable.PSVersion.Major -eq '7'){
+          mkdir -p ${{ inputs.path }}
+        } else {
+          mkdir -Path ${{ inputs.path }}
+        }
+
+      }
+    shell: powershell
