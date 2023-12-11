@@ -1,0 +1,17 @@
+name: shared_artifactory_install_artifactory_tools
+inputs:
+  artifactoryServiceConnection:
+    required: false
+    type: string
+runs:
+  using: composite
+  steps:
+  - uses: "./.github/actions/shared_artifactory_jfrog_cli_temp_dir"
+#   # This item has no matching transformer
+#   - task: JFrogToolsInstaller@1
+#     inputs:
+#       artifactoryConnection: "${{ inputs.artifactoryServiceConnection }}"
+#       cliInstallationRepo: jfrog-cli-v2
+#       installCustomVersion: true
+#       cliVersion: 2.43.0
+#     displayName: Install the Artifactory CLI from AEMO Artifactory
