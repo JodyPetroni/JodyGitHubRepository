@@ -1,0 +1,385 @@
+# Environment variables defined in a calling workflow are not accessible to this reusable workflow. Refer to the documentation for further details on this limitation.
+name: libraries_nuget_build
+on:
+  workflow_call:
+    inputs:
+      dotnetSdkVersion:
+        required: false
+        default: 6.x
+        type: string
+      agentPool:
+        required: false
+        default: '{"vmImage":"ubuntu-22.04"}'
+        type: string
+      baseDirectory:
+        required: false
+        default: ''
+        type: string
+      buildMajorNumber:
+        required: false
+        type: string
+      buildMinorNumber:
+        required: false
+        type: string
+      buildVersionHotfixBuildBase:
+        required: false
+        type: string
+      artifactoryServiceConnection:
+        required: false
+        type: string
+      artifactoryXrayServiceConnection:
+        required: false
+        type: string
+      artifactoryBuildName:
+        required: false
+        type: string
+      artifactoryNuGetRegistry:
+        required: false
+        default: generic-nuget-library-release
+        type: string
+      repoPrefix:
+        required: false
+        type: string
+      projectFile:
+        required: false
+        default: ''
+        type: string
+      buildPlatform:
+        required: false
+        default: '"Any CPU"'
+        type: string
+      sonarcloud:
+        required: false
+        type: string
+jobs:
+  shared_base_directory-BaseDirectory:
+    name: Base directory
+    runs-on: windows-latest
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4.1.0
+    - name: Base directory handler
+      id: basedir
+      run: |-
+        [string] $path = ([string] '${{ env.baseDirectory }}')
+        Write-Host "Raw base dir: $path"
+        if ( [string]::IsNullOrEmpty($path) )
+        {
+          $path = '.'
+        }
+        else
+        $path = $path.TrimEnd('/')
+        Write-Host "Base directory prefix: $path"
+        Write-Host "##vso[task.setvariable variable=baseDirectoryPrefix;isOutput=true]$path"
+      shell: powershell
+    - name: csproj Base directory handler
+      id: csprojbasedir
+      run: |-
+        [string] $path = ([string] '${{ env.csprojBaseDirectory }}')
+        Write-Host "Raw base dir: $path"
+        if ( [string]::IsNullOrEmpty($path) )
+        {
+          $path = '.'
+        }
+        else
+        $path = $path.TrimEnd('/')
+        Write-Host "Base directory prefix: $path"
+        Write-Host "##vso[task.setvariable variable=csprojBaseDirectoryPrefix;isOutput=true]$path"
+      shell: powershell
+    env:
+      baseDirectory: "${{ env.baseDirectory }}"
+      csprojBaseDirectory: "${{ env.csprojBaseDirectory }}"
+  shared_dotnet_stages_prepare-Checks:
+    name: Checks
+    runs-on: ubuntu-latest
+    env:
+      ADO_User: AEMOJPetroni2
+      PAT_User: eap-user
+      buildAgentPool: '"${{ fromJSON(inputs.agentPool) }}"'
+      dotnetSdkVersion: "${{ inputs.dotnetSdkVersion }}"
+      artifactoryServiceConnection: "${{ inputs.artifactoryServiceConnection }}"
+      projectFile: "${{ inputs.projectFile }}"
+      baseDirectory: "${{ inputs.baseDirectory }}"
+      csprojBaseDirectory: ''
+      configRepo: ''
+      projectName: "${{ inputs.sonarCloud.projectKey }}"
+      ref: "${{ env.ref }}"
+      artifactoryNuGetRegistry: "${{ inputs.artifactoryNuGetRegistry }}"
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4.1.0
+    - uses: "./.github/actions/shared_display_available_inputs"
+      with:
+        templateParameters: '"${{parameters}}"'
+    - uses: "./.github/actions/shared_git_check_branch_name"
+      with:
+        branchName: "${{ github.ref }}"
+  shared_dotnet_stages_prepare-Setup_Widget:
+    name: Set Build / Release Widget
+    needs: shared_dotnet_stages_prepare-shared_base_directory-BaseDirectory
+    runs-on: ubuntu-latest
+    env:
+      ADO_User: AEMOJPetroni2
+      PAT_User: eap-user
+      buildAgentPool: '"${{ fromJSON(inputs.agentPool) }}"'
+      dotnetSdkVersion: "${{ inputs.dotnetSdkVersion }}"
+      artifactoryServiceConnection: "${{ inputs.artifactoryServiceConnection }}"
+      projectFile: "${{ inputs.projectFile }}"
+      baseDirectory: "${{ inputs.baseDirectory }}"
+      csprojBaseDirectory: ''
+      configRepo: ''
+      projectName: "${{ inputs.sonarCloud.projectKey }}"
+      ref: "${{ env.ref }}"
+      artifactoryNuGetRegistry: "${{ inputs.artifactoryNuGetRegistry }}"
+    if: inputs.projectName != ''
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4.1.0
+    - uses: "./.github/actions/shared_widgets_create_widget"
+      with:
+        projectName: "${{ inputs.projectName }}"
+        ref: "${{ inputs.ref }}"
+  shared_dotnet_stages_prepare-Prepare_Version:
+    name: Generate Build Version & Install Artifactory CLI
+    runs-on: ubuntu-latest
+    env:
+      ADO_User: AEMOJPetroni2
+      PAT_User: eap-user
+      buildAgentPool: '"${{ fromJSON(inputs.agentPool) }}"'
+      dotnetSdkVersion: "${{ inputs.dotnetSdkVersion }}"
+      artifactoryServiceConnection: "${{ inputs.artifactoryServiceConnection }}"
+      projectFile: "${{ inputs.projectFile }}"
+      baseDirectory: "${{ inputs.baseDirectory }}"
+      csprojBaseDirectory: ''
+      configRepo: ''
+      projectName: "${{ inputs.sonarCloud.projectKey }}"
+      ref: "${{ env.ref }}"
+      artifactoryNuGetRegistry: "${{ inputs.artifactoryNuGetRegistry }}"
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4.1.0
+    - uses: "./.github/actions/shared_git_set_build_version"
+      with:
+        buildVersion: "${{ env.buildVersion }}"
+  shared_dotnet_stages_prepare-Collate_Artifactory_BuildInfo:
+    name: Collate Artifactory Build Info
+    runs-on: ubuntu-latest
+    env:
+      ADO_User: AEMOJPetroni2
+      PAT_User: eap-user
+      buildAgentPool: '"${{ fromJSON(inputs.agentPool) }}"'
+      dotnetSdkVersion: "${{ inputs.dotnetSdkVersion }}"
+      artifactoryServiceConnection: "${{ inputs.artifactoryServiceConnection }}"
+      projectFile: "${{ inputs.projectFile }}"
+      baseDirectory: "${{ inputs.baseDirectory }}"
+      csprojBaseDirectory: ''
+      configRepo: ''
+      projectName: "${{ inputs.sonarCloud.projectKey }}"
+      ref: "${{ env.ref }}"
+      artifactoryNuGetRegistry: "${{ inputs.artifactoryNuGetRegistry }}"
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4.1.0
+    - uses: "./.github/actions/shared_artifactory_collate_artifactory_buildinfo"
+      with:
+        jfrog_cli_temp_dir: "${{ env.jfrog_cli_temp_dir }}"
+        publish_buildinfo_artifact: buildinfo-prepare
+  shared_dotnet_stages_prepare-Prepare_Dependencies:
+    name: Restore Dependencies
+    needs:
+    - shared_dotnet_stages_prepare-shared_base_directory-BaseDirectory
+    - shared_dotnet_stages_prepare-Prepare_Version
+    runs-on: ubuntu-latest
+    env:
+      ADO_User: AEMOJPetroni2
+      PAT_User: eap-user
+      baseDirectoryPrefix: UPDATE ME
+      buildAgentPool: '"${{ fromJSON(inputs.agentPool) }}"'
+      dotnetSdkVersion: "${{ inputs.dotnetSdkVersion }}"
+      artifactoryServiceConnection: "${{ inputs.artifactoryServiceConnection }}"
+      projectFile: "${{ inputs.projectFile }}"
+      baseDirectory: "${{ inputs.baseDirectory }}"
+      csprojBaseDirectory: ''
+      configRepo: ''
+      projectName: "${{ inputs.sonarCloud.projectKey }}"
+      ref: "${{ env.ref }}"
+      artifactoryNuGetRegistry: "${{ inputs.artifactoryNuGetRegistry }}"
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4.1.0
+    - uses: "./.github/actions/shared_dotnet_dotnet_restore_cache"
+      with:
+        sdkVersion: "${{ inputs.dotnetSdkVersion }}"
+        projectFile: "${{ inputs.projectFile }}"
+        enableCaching: true
+        publishArtifact: nuget-packages
+        baseDirectory: "${{ env.baseDirectoryPrefix }}"
+        baseDirectoryForCache: "${{ env.baseDirectoryPrefix }}/**"
+        artifactoryServiceConnection: "${{ inputs.artifactoryServiceConnection }}"
+        artifactoryNuGetRegistry: "${{ inputs.artifactoryNuGetRegistry }}"
+  Build-Build_DotNet:
+    name: Build DotNet Project
+    runs-on: ubuntu-latest
+    env:
+      baseDirectoryPrefix: UPDATE ME
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4.1.0
+    - uses: "./.github/actions/shared_dotnet_dotnet_build"
+      with:
+        sdkVersion: "${{ inputs.dotnetSdkVersion }}"
+        projectDirectory: "${{ env.baseDirectoryPrefix }}/${{ inputs.projectFile }}"
+        consumeNuGetPackagesArtifact: nuget-packages
+        buildArtifactPublishName: binaries
+        buildPlatform: "${{ inputs.buildPlatform }}"
+  Verify-UnitTest:
+    name: DotNet Unit Tests
+    needs:
+    - Build-Build_DotNet
+    runs-on: ubuntu-latest
+    env:
+      baseDirectoryPrefix: UPDATE ME
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4.1.0
+    - uses: "./.github/actions/shared_dotnet_dotnet_test"
+      with:
+        sdkVersion: "${{ inputs.dotnetSdkVersion }}"
+        projectDirectory: "${{ env.baseDirectoryPrefix }}/${{ inputs.projectFile }}"
+        consumeNuGetPackagesArtifact: nuget-packages
+        publishResultsArtifact: test-results
+        publishCoverageArtifact: test-coverage
+        buildPlatform: "${{ inputs.buildPlatform }}"
+  Verify-StaticAnalysis:
+    name: Static Analysis
+    needs:
+    - Verify-UnitTest
+    - Build-Build_DotNet
+    runs-on: ubuntu-latest
+    env:
+      baseDirectoryPrefix: UPDATE ME
+    steps:
+    - name: Use Dot Net Core 3.1.x
+      uses: actions/setup-dotnet@v4.0.0
+      with:
+        dotnet-version: 3.1.x
+      env: {}
+  PackageAndPublish-TagRepository:
+    name: Tag Commit
+    needs:
+    - Verify-UnitTest
+    - Verify-StaticAnalysis
+    runs-on: ubuntu-latest
+    env:
+      baseDirectoryPrefix: UPDATE ME
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4.1.0
+    - uses: "./.github/actions/shared_git_create_git_tag"
+      with:
+        tagName: "${{ env.buildVersion }}"
+        tagComment: "${{ env.buildVersion }}"
+  PackageAndPublish-Package:
+    name: Pack DotNet Library
+    needs:
+    - PackageAndPublish-TagRepository
+    - Verify-UnitTest
+    - Verify-StaticAnalysis
+    runs-on: ubuntu-latest
+    env:
+      baseDirectoryPrefix: UPDATE ME
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4.1.0
+    - uses: actions/setup-dotnet@v4.0.0
+      with:
+        dotnet-version: "${{ inputs.dotnetSdkVersion }}"
+#     # This item has no matching transformer
+#     - task: JFrogDotnetCore@1
+#       displayName: ArtifactoryDotnetCore - Restore
+#       inputs:
+#         command: restore
+#         artifactoryConnection: "${{inputs.artifactoryServiceConnection}}"
+#         targetResolveRepo: "${{inputs.artifactoryNuGetRegistry}}"
+#         rootPath: "${{ env.baseDirectoryPrefix }}"
+#         packagesDirectory: "${{ runner.workspace }}/.nuget/packages"
+#         arguments: "${{ inputs.projectFile }} /property:Configuration=Release --use-lock-file --locked-mode"
+    - name: Dotnet Build
+      run: dotnet build ${{ env.baseDirectoryPrefix }}/${{ inputs.projectFile }} --configuration Release --source ${{ runner.workspace }}/.nuget/packages
+    - name: Dotnet Pack
+      run: dotnet pack ${{ env.baseDirectoryPrefix }}/${{ inputs.projectFile }} --configuration Release --output "${{ runner.workspace }}/dist" --no-build --include-symbols -property:PackageVersion=${{ github.run_number }} -property:Platform=${{ inputs.buildPlatform }};SymbolPackageFormat=snupkg
+    - uses: actions/upload-artifact@v3.1.3
+      with:
+        name: package
+        path: "${{ runner.workspace }}"
+  PackageAndPublish-Publish:
+    name: "Publish to Artifactory Build Registry: ${{ variables.nugetBuildRepo }}"
+    needs:
+    - PackageAndPublish-Package
+    - Verify-UnitTest
+    - Verify-StaticAnalysis
+    runs-on: ubuntu-latest
+    env:
+      baseDirectoryPrefix: UPDATE ME
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4.1.0
+    - uses: "./.github/actions/shared_artifactory_install_artifactory_tools"
+      with:
+        artifactoryServiceConnection: "${{ inputs.artifactoryServiceConnection }}"
+    - uses: actions/download-artifact@v3.0.2
+      with:
+        name: package
+        path: "${{ runner.workspace }}"
+#     # This item has no matching transformer
+#     - task: JFrogDotnetCore@1
+#       displayName: Upload nuget package file to Artifactory repo
+#       inputs:
+#         command: push
+#         artifactoryConnection: "${{inputs.artifactoryServiceConnection}}"
+#         targetDeployRepo: "${{ env.nugetBuildRepo }}"
+#         pathToNupkg: "${{ runner.workspace }}/dist/*.*nupkg"
+#         collectBuildInfo: true
+#         buildName: "${{ inputs.artifactoryBuildName }}"
+#         buildNumber: "${{ env.buildVersion }}"
+#     # This item has no matching transformer
+#     - task: JFrogPublishBuildInfo@1
+#       displayName: Publishing buildInfo to Artifactory
+#       inputs:
+#         artifactoryConnection: "${{ inputs.artifactoryServiceConnection }}"
+#         buildName: "${{ inputs.artifactoryBuildname }}"
+#         buildNumber: "${{ env.buildVersion }}"
+#     # This item has no matching transformer
+#     - task: JFrogBuildScan@1
+#       displayName: Scanning build with Jfrog XRay
+#       inputs:
+#         xrayConnection: "${{ inputs.artifactoryXrayServiceConnection }}"
+#         buildName: "${{ inputs.artifactoryBuildname }}"
+#         buildNumber: "${{ env.buildVersion }}"
+#         allowFailBuild: true
+#         vuln: true
+  PromoteBuild-Promote_Build:
+    needs:
+    - PackageAndPublish-TagRepository
+    - PackageAndPublish-Package
+    - PackageAndPublish-Publish
+    runs-on: ubuntu-latest
+    if: success() && env.isReleasableBranch == true
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4.1.0
+    - uses: "./.github/actions/shared_artifactory_install_artifactory_tools"
+      with:
+        artifactoryServiceConnection: "${{ inputs.artifactoryServiceConnection }}"
+#     # This item has no matching transformer
+#     - task: JFrogBuildPromotion@1
+#       displayName: 'Promote artifact. Please note the error message "Error occurred while copying: null" appears if the artifact has already been promoted.'
+#       continueOnError: true
+#       inputs:
+#         artifactoryConnection: "${{ inputs.artifactoryServiceConnection }}"
+#         buildName: "${{ inputs.artifactoryBuildName }}"
+#         buildNumber: "${{ env.buildVersion }}"
+#         targetRepo: "${{ env.nugetReleaseRepo }}"
+#         status: Release
+#         includeDependencies: false
+#         copy: true
