@@ -1,0 +1,117 @@
+name: shared_widgets_create_pat_token
+runs:
+  using: composite
+  steps:
+  - name: AKV
+    uses: azure/login@v1.5.0
+    with:
+      creds: "${{ secrets.AZURE_CREDENTIALS }}"
+      enable-AzPSSession: true
+  - name: AKV
+    uses: azure/powershell@v1.4.0
+    with:
+      inlineScript: |-
+        $devOpsKeyVault = "INFR-ADODDC-PRD-KVT-AUE"
+        $devOpsKeyVaultSubID = "2cb8e9ca-0cc2-4ca3-9eb2-9080577c6403"
+        $saUser = "sa-eap-prd-ado"
+        $organisation = "AEMO-Application-Delivery"
+        $patName = "ey-pat"
+        $scopeType = "project"
+        $extend = $true
+        $storeInKvt = $false
+        $agentName = $Env:AGENT_NAME
+        Write-Host "##[debug] Azure DevOps Agent: $agentName"
+        if ($agentName -like "Hosted Agent*" -or $agentName -like "Azure Pipelines*") {
+          $AzureDevOpsExtIP = Invoke-RestMethod http://ipinfo.io/json | Select-Object -exp ip
+          Write-Host "##[debug] Adding Azure DevOps public IP $AzureDevOpsExtIP to KeyVault Firewall"
+          do {
+            try {
+              # There is contention when doing this operation, so we need to retry until it succeeds.
+              Add-AzKeyVaultNetworkRule -VaultName $devOpsKeyVault -IpAddressRange "$AzureDevOpsExtIP/32" -SubscriptionId $devOpsKeyVaultSubID
+              Write-Host "##[debug] Getting Azure DevOps $saUser Password from Key Vault $devOpsKeyVault"
+              $saPass = Get-AzKeyVaultSecret -VaultName $devOpsKeyVault -Name $saUser -AsPlainText
+
+              Write-Host "##vso[task.setvariable variable=saPass;issecret=true]$saPass"
+              $success = $true
+
+            } catch {
+              start-sleep -s 1
+            } finally {
+              do {
+                try {
+                  Write-Host "##[debug] Remove $AzureDevOpsExtIP from KeyVault Firewall"
+                  Remove-AzKeyVaultNetworkRule -VaultName $devOpsKeyVault -SubscriptionId $devOpsKeyVaultSubID -IPAddress "$AzureDevOpsExtIP/32"
+                  $success1 = $true
+                } catch {
+                  start-sleep -s 1
+                }
+              } until ($success1)
+            }
+          } until ($success)
+        } else {
+          $saPass = Get-AzKeyVaultSecret -VaultName $devOpsKeyVault -Name $saUser -AsPlainText
+          Write-Host "##vso[task.setvariable variable=saPass;issecret=true]$saPass"
+        }
+      errorActionPreference: Stop
+      failOnStandardError: false
+      azPSVersion: latest
+  - name: Get Token
+    run: |-
+      # Write your PowerShell commands here.
+      # Login as SA
+      $agentName = $Env:AGENT_NAME
+      Write-Host "##[debug] Azure DevOps Agent: $agentName"
+      if ($agentName -like "Hosted Agent*" -or $agentName -like "Azure Pipelines*") {
+        Write-Host "##[debug] Installing Az.Accounts Module"
+        Install-Module Az.Accounts -Force
+        Import-Module Az.Accounts
+      }
+      Write-Host ${{ env.saPass }}
+      $azureDevopsResourceId = "499b84ac-1321-427f-aa17-267ca6975798"   ## Global - azure devops resource id.
+      $organisation = "AEMO-Application-Delivery"
+      $uri = "https://vssps.dev.azure.com/$organisation/_apis/tokens/pats?api-version=7.1-preview.1"
+      $patName = "ey-pat"
+
+      $User = "sa-eap-prd-ado@aemo.com.au"
+      $PWord = ConvertTo-SecureString -String "${{ env.saPass }}" -AsPlainText -Force
+      $Credential = New-Object -TypeName "System.Management.Automation.PSCredential" -ArgumentList $User,$PWord
+      Connect-AzAccount -Credential $Credential -Tenant "320c999e-3876-4ad0-b401-d241068e9e60" -Subscription "2cb8e9ca-0cc2-4ca3-9eb2-9080577c6403"
+
+      # write-host "##[debug] run az account get-access-token"
+      $token = Get-AzAccessToken -ResourceUrl $azureDevopsResourceId
+
+      # Write-Host $token.Token
+      $Headers = @{
+        "Content-Type" = "application/json"
+        Authorization = "Bearer $($token.Token)"
+      }
+      Write-Host $Headers
+      Write-Host "##[debug] Connects to DevOps Organisation $organisation and retrieve existing PAT token for $User"
+
+      $scope = "app_token" # "vso.project vso.project_write vso.project_manage vso.profile vso.build vso.release"
+      Write-Host "##[debug] scope: $scope"
+      $ExpiryDate = (Get-Date).AddMinutes(5) | Get-Date -Format yyyy-MM-ddTHH:mm:ss.fffZ
+      Write-Host "##[debug] Expiry Date: $ExpiryDate"
+      $AllPATs = Invoke-RestMethod -Uri $uri -Method GET -ContentType "application/json" -Headers $Headers
+      write-host $AllPATs.patTokens | ConvertTo-Json
+      $PATCreated = ($AllPATs.patTokens | ConvertTo-Json | ConvertFrom-Json).displayName -contains "createdByScript-$patName"
+      Write-Host $PATCreated
+      If ($PATCreated) {
+        $token = $AllPATs.patTokens | where {$_.displayName -match "createdByScript-$PatSecretName"} | Get-Unique
+        Write-Host "##[debug] Found! Current token to be expired $($token.validTo) UTC"
+      }
+      $patDisplayName = "createdByScript-" + $patName + "-" + $ExpiryDate
+      $BodyJson = @"
+      {
+        "displayName": "$patDisplayName",
+        "scope": "$scope",
+        "validTo": "$ExpiryDate",
+        "allOrgs": false
+      }
+      "@
+      write-host $BodyJson
+      $createPAT = Invoke-RestMethod -Uri $uri -Method POST -ContentType "application/json" -Headers $Headers -Body $BodyJson
+      # Write-Host "##[debug] PAT created $($createPAT.patToken.token)"
+      # Write-Host "##[debug] PAT created $($createPAT.patToken)"
+      Write-Host "##vso[task.setvariable variable=PAT;issecret=true]$($createPAT.patToken.token)"
+    shell: powershell
