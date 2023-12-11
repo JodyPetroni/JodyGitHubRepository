@@ -1,0 +1,24 @@
+name: sample/sample-pattern-implementations/sample-dotnet-nuget-lib
+on:
+  push:
+    branches:
+    - "*"
+  # Github Actions does not support schedule branch filters. Scheduled workflows run on the latest commit on the default or base branch
+  schedule:
+  - cron: 0 13 * * 1-5
+jobs:
+  libraries_nuget_build:
+    name: libraries_nuget_build
+    uses: "./.github/workflows/libraries_nuget_build.yml"
+    with:
+      dotnetSdkVersion: 6.x
+      buildMajorNumber: 2
+      buildMinorNumber: 1
+      buildVersionHotfixBuildBase: 5
+      artifactoryServiceConnection: sample-pipeline-service-v2
+      artifactoryXrayServiceConnection: sample-xray-service-v2
+      artifactoryBuildName: sample-nuget-lib
+      repoPrefix: sampleapi
+      projectFile: SampleLib.sln
+      buildPlatform: '"Any CPU"'
+      sonarcloud: '{"serviceConnection":"aemo-sonarcloud-server","organisation":"aemo","projectKey":"test-dotnet-library","projectName":"Test-Dotnet-Library"}'
