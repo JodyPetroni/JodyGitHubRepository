@@ -1,0 +1,33 @@
+name: shared_git_create_git_tag
+inputs:
+  tagName:
+    required: false
+    type: string
+  tagComment:
+    required: false
+    type: string
+  condition:
+    required: false
+    default: true
+    type: string
+  latestTag:
+    required: false
+    default: ''
+    type: string
+runs:
+  using: composite
+  steps:
+  - uses: actions/checkout@v4.1.0
+  - name: Create tag if build is on master, release or hotfix branch
+    if: success() && inputs.condition == true
+    run: |-
+      git config user.email "azure-devops-pipeline@aemo.com.au"
+      git config user.name "Azure Devops build pipeline"
+      git tag --annotate --message "${{ inputs.tagComment }}" ${{ inputs.tagName }}
+      git push --tags
+    shell: pwsh
+  - if: length(inputs.latestTag) != 0 && (success() && inputs.condition == true)
+    run: |-
+      git tag --force --annotate --message "Latest published version" ${{ inputs.latestTag }}
+      git push --force --tags
+    shell: pwsh

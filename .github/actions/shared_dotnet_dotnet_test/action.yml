@@ -1,0 +1,76 @@
+name: shared_dotnet_dotnet_test
+inputs:
+  sdkVersion:
+    required: false
+    type: string
+  projectDirectory:
+    required: false
+    type: string
+  consumeNuGetPackagesArtifact:
+    required: false
+    type: string
+  publishResultsArtifact:
+    required: false
+    default: test-results
+    type: string
+  publishCoverageArtifact:
+    required: false
+    default: test-coverage
+    type: string
+  buildPlatform:
+    required: false
+    default: '"Any CPU"'
+    type: string
+  continueOnError:
+    required: false
+    default: true
+    type: boolean
+  playwrightBaseDirectory:
+    required: false
+    default: ''
+    type: string
+runs:
+  using: composite
+  steps:
+  - name: Use Dot Net Core 3.1.x
+    uses: actions/setup-dotnet@v4.0.0
+    with:
+      dotnet-version: 3.1.x
+  - name: Use DotNet SDK Version ${{ inputs.sdkVersion }}
+    uses: actions/setup-dotnet@v4.0.0
+    with:
+      dotnet-version: "${{ inputs.sdkVersion }}"
+  - uses: actions/download-artifact@v3.0.2
+    with:
+      name: "${{ inputs.consumeNuGetPackagesArtifact }}"
+      path: "${{ runner.workspace }}/.nuget/packages"
+  - uses: "./.github/actions/shared_artifactory_mkdir"
+    with:
+      path: "${{ runner.workspace }}/${{ inputs.publishResultsArtifact }}"
+      description: create ${{ runner.workspace }}/${{ inputs.publishResultsArtifact }}
+  - uses: "./.github/actions/shared_artifactory_mkdir"
+    with:
+      path: "${{ runner.workspace }}/${{ inputs.publishCoverageArtifact }}"
+      description: create ${{ runner.workspace }}/${{ inputs.publishCoverageArtifact }}
+  - name: DotNet Build ${{ inputs.projectDirectory }}
+    run: dotnet build ${{ inputs.projectDirectory }} --configuration Release         --source ${{ runner.workspace }}/.nuget/packages /property:Platform=${{ inputs.buildPlatForm }}
+    shell: bash
+  - name: Install Playwright Browsers
+    if: "!(inputs.playwrightBaseDirectory == '')"
+    run: "${{ github.workspace }}\\${{ inputs.playwrightBaseDirectory }}\\bin\\Release\\net6.0\\playwright.ps1 install --with-deps"
+    shell: powershell
+  - name: Dotnet Test - Unit Tests
+    continue-on-error: "${{ inputs.continueOnError }}"
+    run: dotnet test ${{ inputs.projectDirectory }} --no-build --no-restore --configuration Release --logger "trx;LogFileName=${{ runner.workspace }}/${{ inputs.publishResultsArtifact }}/TestResults.trx" --results-directory ${{ runner.workspace }}/${{ inputs.publishResultsArtifact }} /property:Platform=${{ inputs.buildPlatForm }} /p:CollectCoverage=true /p:CoverletOutputFormat=lcov /p:CoverletOutput=${{ runner.workspace }}/${{ inputs.publishCoverageArtifact }}/
+    shell: bash
+  - name: Publish artifact test-results
+    uses: actions/upload-artifact@v3.1.3
+    with:
+      name: test-results
+      path: "${{ runner.workspace }}/${{ inputs.publishResultsArtifact }}"
+  - name: Publish artifact coverage-report
+    uses: actions/upload-artifact@v3.1.3
+    with:
+      name: coverage-report
+      path: "${{ runner.workspace }}/${{ inputs.publishCoverageArtifact }}"
+#   # (VSTest) is an unsupported test runner.

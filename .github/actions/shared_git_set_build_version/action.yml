@@ -1,0 +1,13 @@
+name: shared_git_set_build_version
+inputs:
+  buildVersion:
+    required: false
+    type: string
+runs:
+  using: composite
+  steps:
+  - name: Set the pipeline build number
+    run: |-
+      Write-Host Setting build number to ${{ inputs.buildVersion }}
+      Write-Host "##vso[build.updatebuildnumber]${{ inputs.buildVersion }}"
+    shell: powershell

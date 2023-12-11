@@ -1,0 +1,32 @@
+name: shared_artifactory_collate_artifactory_buildinfo
+inputs:
+  jfrog_cli_temp_dir:
+    required: false
+    default: ''
+    type: string
+  consume_buildinfo_artifact:
+    required: false
+    default: ''
+    type: string
+  publish_buildinfo_artifact:
+    required: false
+    default: ''
+    type: string
+runs:
+  using: composite
+  steps:
+  - uses: "./.github/actions/shared_artifactory_jfrog_cli_temp_dir"
+#   # This action relies on the workflow '.yml' being present in this repository (change the repository parameter if the workflow is in a different repository).
+#   # Ensure the workflow exists and uploads an artifact for this to use.
+#   - if: inputs.consume_buildinfo_artifact != ''
+#     uses: dawidd6/action-download-artifact@v2.28.0
+#     with:
+#       name: "${{ inputs.consume_buildinfo_artifact }}"
+#       github_token: "${{ secrets.GITHUB_TOKEN }}"
+#       path: "${{ inputs.jfrog_cli_temp_dir }}"
+#       repo: "${{ github.repository }}"
+  - if: inputs.publish_buildinfo_artifact != ''
+    uses: actions/upload-artifact@v3.1.3
+    with:
+      name: "${{ inputs.publish_buildinfo_artifact }}"
+      path: "${{ inputs.jfrog_cli_temp_dir }}"

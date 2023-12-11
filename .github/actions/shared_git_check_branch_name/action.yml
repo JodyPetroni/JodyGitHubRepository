@@ -1,0 +1,30 @@
+name: shared_git_check_branch_name
+inputs:
+  branchName:
+    required: false
+    type: string
+runs:
+  using: composite
+  steps:
+  - name: Check the Git branch name
+    run: |-
+      $string="${{ inputs.branchName }}"
+
+      # This is the most restrictive pattern, used as validation for helm templates, plus '/'.
+      # Whilst helm doesn't apply to all pipelines, it is a good standard.
+      $pattern="^[a-z0-9]([\-a-z\d\/]*[a-z0-9])?([\.\/][a-z0-9]([\-a-z0-9]*[a-z0-9])?)*$"
+
+      if ( $string -cmatch $pattern )
+      {
+        Write-Host "$string is a compliant branch name for helm"
+      }
+      else
+      {
+        Write-Host "$string is NOT a compliant branch name for helm"
+        Write-Host "branches must follow pattern <letters-or-digits-or-hyphens>(<optional-dot-or-slash-separator><other-names>)*"
+        Write-Host " in future this will halt the pipeline"
+      #  exit 1 # enable once engagement with customer completed, so they are aware of the behaviour
+      }
+
+      exit 0
+    shell: powershell

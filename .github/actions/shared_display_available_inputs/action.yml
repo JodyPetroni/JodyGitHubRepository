@@ -1,0 +1,17 @@
+name: shared_display_available_inputs
+inputs:
+  templateParameters:
+    required: false
+    default: "{}"
+    type: string
+runs:
+  using: composite
+  steps:
+  - name: Print all Parameters
+    run: |-
+      $jsonParams = '${{ convertToJson(fromJSON(inputs.templateParameters)) }}'
+      Write-Host $jsonParams
+    shell: pwsh
+  - name: Display all environment variables
+    run: 'Get-ChildItem env:'
+    shell: pwsh

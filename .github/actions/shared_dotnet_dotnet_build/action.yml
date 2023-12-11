@@ -1,0 +1,46 @@
+name: shared_dotnet_dotnet_build
+inputs:
+  sdkVersion:
+    required: false
+    type: string
+  projectDirectory:
+    required: false
+    type: string
+  consumeNuGetPackagesArtifact:
+    required: false
+    type: string
+  buildArtifactPublishName:
+    required: false
+    default: binaries
+    type: string
+  buildPlatform:
+    required: false
+    default: '"Any CPU"'
+    type: string
+runs:
+  using: composite
+  steps:
+  - name: Use Dot Net Core 3.1.x
+    uses: actions/setup-dotnet@v4.0.0
+    with:
+      dotnet-version: 3.1.x
+  - name: Use DotNet SDK Version ${{ inputs.sdkVersion }}
+    uses: actions/setup-dotnet@v4.0.0
+    with:
+      dotnet-version: "${{ inputs.sdkVersion }}"
+  - uses: actions/download-artifact@v3.0.2
+    with:
+      name: "${{ inputs.consumeNuGetPackagesArtifact }}"
+      path: "${{ runner.workspace }}/.nuget/packages"
+  - name: DotNet Build ${{ inputs.ProjectDirectory }}
+    if: inputs.buildPlatForm != ''
+    run: dotnet build ${{ inputs.ProjectDirectory }} --configuration Release --source ${{ runner.workspace }}/.nuget/packages --output ${{ runner.workspace }}/dist /property:Platform=${{ inputs.buildPlatForm }}
+    shell: bash
+  - name: DotNet Build ${{ inputs.ProjectDirectory }}
+    if: inputs.buildPlatForm == ''
+    run: dotnet build ${{ inputs.ProjectDirectory }} --configuration Release --source ${{ runner.workspace }}/.nuget/packages --output ${{ runner.workspace }}/dist
+    shell: bash
+  - uses: actions/upload-artifact@v3.1.3
+    with:
+      name: "${{ inputs.buildArtifactPublishName }}"
+      path: "${{ runner.workspace }}/dist"

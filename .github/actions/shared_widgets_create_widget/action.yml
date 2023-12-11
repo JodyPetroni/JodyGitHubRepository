@@ -1,0 +1,51 @@
+name: shared_widgets_create_widget
+inputs:
+  projectName:
+    required: false
+    default: not-applicable
+    type: string
+  sonarProperties:
+    required: false
+    default: not-applicable
+    type: string
+  ref:
+    required: false
+    default: "$(System.PullRequest.SourceBranch)"
+    type: string
+runs:
+  using: composite
+  steps:
+  - uses: actions/checkout@v4.1.0
+    with:
+      path: sonar
+#   # This action only supports checking out GitHub repositories
+#   - uses: actions/checkout@v4.1.0
+#     with:
+#       repository: git://ci-cd-infrastructure/azure-pipeline-templates
+#       ref: "${{ inputs.ref }}"
+  - uses: "./.github/actions/shared_widgets_create_pat_token"
+  - name: Use DotNet SDK Version 6.x
+    uses: actions/setup-dotnet@v4.0.0
+    with:
+      dotnet-version: 6.x
+  - name: Set Build Widget
+    continue-on-error: true
+    run: |-
+      if("${{ inputs.sonarProperties }}" -ne "not-applicable")
+      {
+        cd ${{ runner.workspace }}/sonar
+        $str = Select-String -Path ${{ inputs.sonarProperties }} -Pattern "sonar.projectKey" | % { $_.Line }
+        $position = $str.IndexOf("=")
+        $pr = $str.Substring($position+1)
+        Write-Host $pr.ToString()
+        Write-Host "-"
+        cd ${{ github.workspace }}/azure-pipeline-templates/shared/widgets
+        Write-Host "1"
+        dotnet widget.dll "${{ env.System_DefinitionId }}" "${{ github.workflow }}" "${{ env.System_TeamProjectId }}" "${{ env.System_TeamProject }}" "$pr" "${{ env.PAT }}"
+      } else {
+        cd ${{ github.workspace }}/azure-pipeline-templates/shared/widgets
+        Write-Host "2"
+        Write-Host "${{ env.PAT }}"
+        dotnet widget.dll "${{ env.System_DefinitionId }}" "${{ github.workflow }}" "${{ env.System_TeamProjectId }}" "${{ env.System_TeamProject }}" "${{ inputs.projectName }}" "${{ env.PAT }}"
+      }
+    shell: powershell

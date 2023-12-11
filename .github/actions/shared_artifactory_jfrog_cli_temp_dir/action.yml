@@ -1,0 +1,8 @@
+name: shared_artifactory_jfrog_cli_temp_dir
+runs:
+  using: composite
+  steps:
+  - uses: "./.github/actions/shared_artifactory_mkdir"
+    with:
+      path: "${{ env.jfrog_cli_temp_dir }}"
+      description: create JFROG_CLI_TEMP_DIR for newer versions of the JFrog CLI (>=1.39.5) as work around for error when it can not find the temp directory.
